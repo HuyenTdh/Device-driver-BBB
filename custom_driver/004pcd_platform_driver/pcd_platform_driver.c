@@ -4,6 +4,8 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/slab.h>
+#include <linux/mod_devicetable.h>
+#include <linux/uaccess.h>
 #include "platform.h"
 
 #define MAX_DEVICES					4
@@ -42,9 +44,34 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev);
 
 static int platform_pcdrv_remove(struct platform_device *platform_pcdev);
 
+enum pcdev_names{
+	PCDEVA1X,
+	PCDEVB1X,
+	PCDEVC1X,
+	PCDEVD1X
+};
+struct device_config{
+	int item1;
+	int item2;
+};
+
+struct device_config pcdev_config[] = {
+	[PCDEVA1X] = {.item1 = 60, .item2 = 21},
+	[PCDEVB1X] = {.item1 = 50, .item2 = 22},
+	[PCDEVC1X] = {.item1 = 40, .item2 = 23},
+	[PCDEVD1X] = {.item1 = 30, .item2 = 24},
+};
+struct platform_device_id pcdevs_ids[] ={
+	[0] = {.name = "pcdev-A1x", .driver_data = PCDEVA1X},
+	[1] = {.name = "pcdev-B1x", .driver_data = PCDEVB1X},
+	[2] = {.name = "pcdev-C1x", .driver_data = PCDEVC1X},
+	[3] = {.name = "pcdev-D1x", .driver_data = PCDEVD1X},
+	{}
+};
 struct platform_driver platform_pcdrv = {
 	.probe = platform_pcdrv_probe,
 	.remove = platform_pcdrv_remove,
+	.id_table = pcdevs_ids,
 	.driver = {
 		.name = "pcd-char-device",
 
@@ -64,8 +91,7 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	pdata = (struct platform_device_data*)dev_get_platdata(&platform_pcdev->dev);
 	if(!pdata){
 		pr_info("No platform data available\n");
-		ret = -EINVAL;
-		goto out;
+		return -EINVAL;
 		
 	}
 	/* Dynamically allocate memory for the device private data */
@@ -84,14 +110,15 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	pr_info("Device serial: %s\n", dev_data->pdata.serial_number);
 	pr_info("Device size: %d\n", dev_data->pdata.size);
 	pr_info("Device permission: %d\n", dev_data->pdata.perm);
+	pr_info("Config item1 = %d\n", pcdev_config[platform_pcdev->id_entry->driver_data].item1);
+	pr_info("Config item2 = %d\n", pcdev_config[platform_pcdev->id_entry->driver_data].item2);
 	/* Dynamically allocate memory for the device buffer using size information
 	 * from the platform data */
 	/* dev_data->buffer = kzalloc(dev_data->pdata.size, GFP_KERNEL); */
 	dev_data->buffer = devm_kzalloc(&platform_pcdev->dev, dev_data->pdata.size, GFP_KERNEL);
 	if(!(dev_data->buffer)){
 		pr_info("Cannot allocate buffer's memory\n");
-		ret = -ENOMEM;
-		goto dev_data_free;
+		return -ENOMEM;
 	}
 	/* Get the device number */
 	dev_data->device_number = pcdrv_data.device_number_base + platform_pcdev->id;
@@ -101,7 +128,7 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	ret = cdev_add(&dev_data->cdev, dev_data->device_number, 1);
 	if(ret < 0){
 		pr_info("Cannot add a char device to the system\n");
-		goto buffer_memory_free;
+		return ret;
 	}
 	/* Create device file for detected platform device */
 	pcdrv_data.pcd_device = device_create(pcdrv_data.pcd_class, NULL, dev_data->device_number,\
@@ -109,7 +136,8 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	if(IS_ERR(pcdrv_data.pcd_device)){
 		pr_info("Cannot create device file\n");
 		ret = PTR_ERR(pcdrv_data.pcd_class);
-		goto cdev_del;
+		cdev_del(&dev_data->cdev);
+		return ret;
 	}
 
 	/* Store pcdev_private_data to platform_pcdev->dev.driver_data
@@ -120,15 +148,6 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	pcdrv_data.total_devices++;
 	pr_info("The probe was successful\n");
 	return 0;
-	/* Error handling */
-cdev_del:
-	cdev_del(&dev_data->cdev);
-buffer_memory_free:
-	devm_kfree(&platform_pcdev->dev, dev_data->buffer);
-dev_data_free:
-	devm_kfree(&platform_pcdev->dev, dev_data);
-out:
-	return ret;
 }
 
 /* Gets call when the device is removed from the system */
