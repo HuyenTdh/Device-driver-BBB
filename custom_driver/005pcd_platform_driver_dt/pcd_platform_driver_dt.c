@@ -6,6 +6,8 @@
 #include <linux/slab.h>
 #include <linux/mod_devicetable.h>
 #include <linux/uaccess.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 #include "platform.h"
 
 #define MAX_DEVICES					4
@@ -87,28 +89,72 @@ struct platform_driver platform_pcdrv = {
 	}
 };
 
+struct platform_device_data* pcdev_get_platform_data_from_dt(struct device* dev)
+{
+	struct platform_device_data* pdata;
+	struct device_node* dev_node = dev->of_node;
+
+	if(!dev_node)
+		return NULL;
+	pdata = devm_kzalloc(dev, sizeof(struct platform_device_data), GFP_KERNEL);
+	if(!pdata){
+		dev_info(dev, "Cannot allocate memory\n");
+		return ERR_PTR(-ENOMEM);
+	}
+	if(of_property_read_string(dev_node, "org,device-serial-number", &pdata->serial_number)){
+		dev_info(dev, "Missing serial number property\n");
+		return ERR_PTR(-EINVAL);
+	}
+	if(of_property_read_u32(dev_node, "org,size", &pdata->size)){
+		dev_info(dev, "Missing size\n");
+		return ERR_PTR(-EINVAL);
+	}
+	if(of_property_read_u32(dev_node, "org,perm", &pdata->perm)){
+                dev_info(dev, "Missing permission\n");
+                return ERR_PTR(-EINVAL);
+        }
+
+	return pdata;
+}
+
 /* Gets call when matched platform device is found */
 static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 {
 	int ret;
 	struct platform_device_data *pdata;
 	struct pcdev_private_data *dev_data;
+//	struct of_device_id *match;
+	struct device *dev = &platform_pcdev->dev;
+	int driver_data;
 
-	pr_info("Device is detected\n");
-#if 0
-        /* Get the platform data */
-	/*pdata = (struct platform_device_data*)platform_pcdev->dev.platform_data;*/
-	pdata = (struct platform_device_data*)dev_get_platdata(&platform_pcdev->dev);
-	if(!pdata){
-		pr_info("No platform data available\n");
-		return -EINVAL;
-		
+	dev_info(dev,"Device is detected\n");
+
+	pdata = pcdev_get_platform_data_from_dt(&platform_pcdev->dev);
+	if(IS_ERR(pdata)){
+		return PTR_ERR(pdata);
 	}
+	
+	if(!pdata)
+	{
+		/* Get the platform data */
+        	/*pdata = (struct platform_device_data*)platform_pcdev->dev.platform_data;*/
+       		pdata = (struct platform_device_data*)dev_get_platdata(&platform_pcdev->dev);
+        	if(!pdata){
+	                dev_info(dev, "No platform data available\n");
+                	return -EINVAL;
+        	}
+		driver_data = platform_pcdev->id_entry->driver_data;
+	}else{
+		//match = of_match_device(platform_pcdev->dev.driver->of_match_table, &platform_pcdev->dev);
+		//driver_data = (int)match->data;
+		driver_data = (int)of_device_get_match_data(&platform_pcdev->dev);
+	}
+
 	/* Dynamically allocate memory for the device private data */
 /*	dev_data = kzalloc(sizeof(struct pcdev_private_data), GFP_KERNEL); */
 	dev_data = devm_kzalloc(&platform_pcdev->dev, sizeof(struct pcdev_private_data), GFP_KERNEL);
 	if(!dev_data){
-		pr_info("Cannot allocate memory\n");
+		dev_info(dev, "Cannot allocate memory\n");
 /*		ret = -ENOMEM;
 *		goto out; */
 		return -ENOMEM;
@@ -117,34 +163,34 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	dev_data->pdata.perm = pdata->perm;
 	dev_data->pdata.serial_number = pdata->serial_number;
 
-	pr_info("Device serial: %s\n", dev_data->pdata.serial_number);
-	pr_info("Device size: %d\n", dev_data->pdata.size);
-	pr_info("Device permission: %d\n", dev_data->pdata.perm);
-	pr_info("Config item1 = %d\n", pcdev_config[platform_pcdev->id_entry->driver_data].item1);
-	pr_info("Config item2 = %d\n", pcdev_config[platform_pcdev->id_entry->driver_data].item2);
+	dev_info(dev, "Device serial: %s\n", dev_data->pdata.serial_number);
+	dev_info(dev, "Device size: %d\n", dev_data->pdata.size);
+	dev_info(dev,"Device permission: %d\n", dev_data->pdata.perm);
+	dev_info(dev, "Config item1 = %d\n", pcdev_config[driver_data].item1);
+	dev_info(dev, "Config item2 = %d\n", pcdev_config[driver_data].item2);
 	/* Dynamically allocate memory for the device buffer using size information
 	 * from the platform data */
 	/* dev_data->buffer = kzalloc(dev_data->pdata.size, GFP_KERNEL); */
 	dev_data->buffer = devm_kzalloc(&platform_pcdev->dev, dev_data->pdata.size, GFP_KERNEL);
 	if(!(dev_data->buffer)){
-		pr_info("Cannot allocate buffer's memory\n");
+		dev_info(dev, "Cannot allocate buffer's memory\n");
 		return -ENOMEM;
 	}
 	/* Get the device number */
-	dev_data->device_number = pcdrv_data.device_number_base + platform_pcdev->id;
+	dev_data->device_number = pcdrv_data.device_number_base + pcdrv_data.total_devices;
 	/* Do cdev init and cdev_add*/
 	cdev_init(&dev_data->cdev, &pcd_fops);
 	dev_data->cdev.owner = THIS_MODULE;
 	ret = cdev_add(&dev_data->cdev, dev_data->device_number, 1);
 	if(ret < 0){
-		pr_info("Cannot add a char device to the system\n");
+		dev_info(dev, "Cannot add a char device to the system\n");
 		return ret;
 	}
 	/* Create device file for detected platform device */
-	pcdrv_data.pcd_device = device_create(pcdrv_data.pcd_class, NULL, dev_data->device_number,\
-			NULL, "pcd-%d", platform_pcdev->id);
+	pcdrv_data.pcd_device = device_create(pcdrv_data.pcd_class, dev, dev_data->device_number,\
+			NULL, "pcd-%d", pcdrv_data.total_devices);
 	if(IS_ERR(pcdrv_data.pcd_device)){
-		pr_info("Cannot create device file\n");
+		dev_info(dev, "Cannot create device file\n");
 		ret = PTR_ERR(pcdrv_data.pcd_class);
 		cdev_del(&dev_data->cdev);
 		return ret;
@@ -156,15 +202,14 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	platform_set_drvdata(platform_pcdev, dev_data);
 	
 	pcdrv_data.total_devices++;
-	pr_info("The probe was successful\n");
-#endif
+	dev_info(dev ,"The probe was successful\n");
+
 	return 0;
 }
 
 /* Gets call when the device is removed from the system */
 static int platform_pcdrv_remove(struct platform_device *platform_pcdev)
 {
-#if 0
 	struct pcdev_private_data *dev_data = (struct pcdev_private_data*)platform_pcdev->dev.driver_data;
 	/* Destroy device was created with device_created() */
 	device_destroy(pcdrv_data.pcd_class, dev_data->device_number);
@@ -176,8 +221,8 @@ static int platform_pcdrv_remove(struct platform_device *platform_pcdev)
 *	kfree(dev_data);
 */
 	pcdrv_data.total_devices--;
-#endif
-	pr_info("Device unpluged\n");
+	dev_info(&platform_pcdev->dev, "Device unpluged\n");
+
         return 0;
 }
 
