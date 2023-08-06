@@ -123,7 +123,7 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	int ret;
 	struct platform_device_data *pdata;
 	struct pcdev_private_data *dev_data;
-//	struct of_device_id *match;
+	struct of_device_id *match;
 	struct device *dev = &platform_pcdev->dev;
 	int driver_data;
 
@@ -145,8 +145,12 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
         	}
 		driver_data = platform_pcdev->id_entry->driver_data;
 	}else{
-		//match = of_match_device(platform_pcdev->dev.driver->of_match_table, &platform_pcdev->dev);
-		//driver_data = (int)match->data;
+		match = of_match_device(platform_pcdev->dev.driver->of_match_table, &platform_pcdev->dev);
+		driver_data = (int)match->data;
+		pr_info("size of void* = %d\n", (int)(sizeof(void*)));
+		pr_info("of_match_table array = %d\n", (int)platform_pcdev->dev.driver->of_match_table);
+		pr_info("org_pcdev_dt_match = %d\n", (int)org_pcdev_dt_match);
+		pr_info("match = %d\n", (int)match);
 		driver_data = (int)of_device_get_match_data(&platform_pcdev->dev);
 	}
 
