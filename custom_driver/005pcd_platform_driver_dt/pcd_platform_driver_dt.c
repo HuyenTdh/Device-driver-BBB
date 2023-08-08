@@ -85,7 +85,7 @@ struct platform_driver platform_pcdrv = {
 	.id_table = pcdevs_ids,
 	.driver = {
 		.name = "pcd-char-device",
-		.of_match_table = org_pcdev_dt_match
+		.of_match_table = of_match_ptr(org_pcdev_dt_match)
 	}
 };
 
@@ -123,31 +123,32 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	int ret;
 	struct platform_device_data *pdata;
 	struct pcdev_private_data *dev_data;
-//	struct of_device_id *match;
+	/* used to store matched entry of 'of_device_id' list of this driver */
+	const struct of_device_id *match;
 	struct device *dev = &platform_pcdev->dev;
 	int driver_data;
 
 	dev_info(dev,"Device is detected\n");
+	/* match will always be NULL if LINUX doesnt support device tree i.e CONFIG_OF is off */
+	match = of_match_device(of_match_ptr(platform_pcdev->dev.driver->of_match_table), &platform_pcdev->dev);
 
-	pdata = pcdev_get_platform_data_from_dt(&platform_pcdev->dev);
-	if(IS_ERR(pdata)){
-		return PTR_ERR(pdata);
+	if(match){
+		pdata = pcdev_get_platform_data_from_dt(&platform_pcdev->dev);
+		if(IS_ERR(pdata)){
+        	        return PTR_ERR(pdata);
+	        }
+		driver_data = (long)match->data;
+	}else{
+		/* Get the platform data */
+                /*pdata = (struct platform_device_data*)platform_pcdev->dev.platform_data;*/
+                pdata = (struct platform_device_data*)dev_get_platdata(&platform_pcdev->dev);
+		driver_data = platform_pcdev->id_entry->driver_data;
 	}
-	
+
 	if(!pdata)
 	{
-		/* Get the platform data */
-        	/*pdata = (struct platform_device_data*)platform_pcdev->dev.platform_data;*/
-       		pdata = (struct platform_device_data*)dev_get_platdata(&platform_pcdev->dev);
-        	if(!pdata){
-	                dev_info(dev, "No platform data available\n");
-                	return -EINVAL;
-        	}
-		driver_data = platform_pcdev->id_entry->driver_data;
-	}else{
-		//match = of_match_device(platform_pcdev->dev.driver->of_match_table, &platform_pcdev->dev);
-		//driver_data = (int)match->data;
-		driver_data = (int)of_device_get_match_data(&platform_pcdev->dev);
+	        dev_info(dev, "No platform data available\n");
+               	return -EINVAL;
 	}
 
 	/* Dynamically allocate memory for the device private data */
@@ -155,8 +156,6 @@ static int platform_pcdrv_probe(struct platform_device *platform_pcdev)
 	dev_data = devm_kzalloc(&platform_pcdev->dev, sizeof(struct pcdev_private_data), GFP_KERNEL);
 	if(!dev_data){
 		dev_info(dev, "Cannot allocate memory\n");
-/*		ret = -ENOMEM;
-*		goto out; */
 		return -ENOMEM;
 	}
 	dev_data->pdata.size = pdata->size;
