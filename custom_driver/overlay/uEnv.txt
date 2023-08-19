@@ -1,0 +1,12 @@
+fdt_file=am355x-boneblack.dtb
+overlay_path=/lib/firmware
+overlay_file=pcdev0.dtbo pcdev1.dtbo
+overlay_fdt=setenv fdtaddr 0x87f00000; setenv fdtovaddr 0x87fc0000
+loadfdt=load mmc 0:1 ${fdtaddr} ${fdt_file}; 
+fdt_cmd=fdt addr ${fdtaddr}; fdt resize 8192; 
+overlay_cmd=for i in ${overlay_file}; do echo loading overlay dtb...; load mmc 0:2 ${fdtovaddr} ${overlay_path}/${i};fdt apply $fdtovaddr; done;
+
+console=ttyS0,115200n8
+bootsettings=setenv bootargs console=ttyO0,115200n8 root=/dev/mmcblk0p2 rw rootfstype=ext4 rootwait earlyprintk mem=512M
+mmcboot=echo Booting from microSD ...; setenv autoload no ; load mmc 0:1 ${loadaddr} uImage ;run overlay_fdt ;run loadfdt;run fdt_cmd;run overlay_cmd; run bootsettings ; bootm ${loadaddr} - ${fdtaddr}
+uenvcmd=run mmcboot
