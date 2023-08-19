@@ -1,0 +1,26 @@
+/dts-v1/;
+/plugin/;
+
+/{
+	fragment@0 {
+		target = <&pcdev0>;
+		__overlay__ {
+			status = "disable";
+		};
+	};
+
+	fragment@1 {
+		target = <&pcdev1>;
+		__overlay__ {
+			status = "disable";
+		};
+	};
+
+	fragment@2 {
+		target = <&pcdev3>;
+		__overlay__ {
+			org,size = <1024>;
+			org,device-serial-number = "PCDEV4XYZ";
+		};
+	};
+};
