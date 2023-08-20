@@ -4,9 +4,9 @@ struct pcdrv_private_data pcdrv_data;
 
 static int platform_pcdrv_probe(struct platform_device *platform_pcdev);
 static int platform_pcdrv_remove(struct platform_device *platform_pcdev);
-ssize_t max_size_show(struct device *dev, struct device_attribute *attr, char *buf);
-ssize_t serial_num_show(struct device *dev, struct device_attribute *attr, char *buf);
-ssize_t max_size_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t show_max_size(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t show_serial_num(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t store_max_size(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
 int pcd_sysfs_create_files(struct device *pcd_dev);
 
 /* File operation */
@@ -52,21 +52,38 @@ struct platform_driver platform_pcdrv = {
 	}
 };
 
-/* Create two device attribute variables */
-static DEVICE_ATTR(max_size, S_IRUGO|S_IWUSR, max_size_show, max_size_store);
-static DEVICE_ATTR(serial_num, S_IRUGO, serial_num_show, NULL);
+static DEVICE_ATTR(max_size, S_IRUGO|S_IWUSR, show_max_size, store_max_size);
+static DEVICE_ATTR(serial_num, S_IRUGO, show_serial_num, NULL);
 
-ssize_t max_size_show(struct device *dev, struct device_attribute *attr, char *buf)
+ssize_t show_max_size(struct device *dev, struct device_attribute *attr, char *buf)
 {
+	/* get access to the device private data */
+	struct pcdev_private_data *pcdev_data = dev_get_drvdata(dev->parent);
+
+	return sprintf(buf, "%d\n", pcdev_data->pdata.size);
 	return 0;
 }
-ssize_t serial_num_show(struct device *dev, struct device_attribute *attr, char *buf)
+ssize_t show_serial_num(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	/* get access to the device private data */
+	struct pcdev_private_data *pcdev_data = dev_get_drvdata(dev->parent);
+
+	return sprintf(buf, "%s\n", pcdev_data->pdata.serial_number);
 }
-ssize_t max_size_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+ssize_t store_max_size(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	return 0;
+	int ret;
+	long value;
+	/* get access to the device private data */
+	struct pcdev_private_data *pcdev_data = dev_get_drvdata(dev->parent);
+
+	ret = kstrtol(buf, 10, &value);
+	if(ret)
+		return ret;
+	pcdev_data->pdata.size = value;
+	pcdev_data->buffer = krealloc(pcdev_data->buffer, pcdev_data->pdata.size, GFP_KERNEL);
+
+	return count;
 }
 
 int pcd_sysfs_create_files(struct device *pcd_dev)
