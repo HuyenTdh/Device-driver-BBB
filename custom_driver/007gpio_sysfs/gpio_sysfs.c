@@ -9,6 +9,7 @@
 #include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/sysfs.h>
+#include <linux/gpio/consumer.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Huyen Do Van");
@@ -17,6 +18,7 @@ MODULE_DESCRIPTION("A gpio sysfs driver");
 /* Device private data structure */
 struct gpiodev_private_data{
 	char label[20];
+	struct gpio_desc* desc;
 };
 /* Driver private data structure */
 struct gpiodrv_private_data{
@@ -52,6 +54,7 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 	struct device* dev = &pdev->dev;
 	const char* name;
 	int i = 0;
+	int ret;
 
 	for_each_available_child_of_node(parent, child){
 		dev_data = devm_kzalloc(dev, sizeof(struct gpiodev_private_data), GFP_KERNEL);
@@ -66,6 +69,24 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 			strcpy(dev_data->label, name);
 			dev_info(dev, "GPIO label: %s\n", dev_data->label);
 		}
+
+		dev_data->desc = devm_fwnode_get_gpiod_from_child(dev, "bone", &child->fwnode,\
+								GPIOD_ASIS, dev_data->label);
+		if(IS_ERR(dev_data->desc)){
+			ret = PTR_ERR(dev_data->desc);
+			return ret;
+		}
+		if(!ret){
+			dev_err(dev, "No GPIO has been assigned to the requested function and/or index\n");
+			return ret;
+		}
+		/* Set the gpio direction to ouput */
+		ret = gpiod_direction_output(dev_data->desc, 0);
+		if(ret){
+			dev_err(dev, "gpio direction set failed\n");
+			return ret;
+		}
+
 		i++;
 	}
 
