@@ -28,6 +28,31 @@ struct gpiodrv_private_data{
 
 int gpio_sysfs_probe(struct platform_device* pdev);
 int gpio_sysfs_remove(struct platform_device* pdev);
+ssize_t direction_show(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t direction_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t value_show(struct device *dev, struct device_attribute *attr, char *buf);
+ssize_t value_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+ssize_t label_show(struct device *dev, struct device_attribute *attr, char *buf);
+
+static DEVICE_ATTR_RW(direction);
+static DEVICE_ATTR_RW(value);
+static DEVICE_ATTR_RO(label);
+
+static struct attribute* gpio_attrs[] = {
+	&dev_attr_direction.attr,
+	&dev_attr_value.attr,
+	&dev_attr_label.attr,
+	NULL
+};
+
+static struct attribute_group gpio_attr_group = {
+	.attrs = gpio_attrs
+};
+
+static const struct attribute_group* gpio_attr_groups[] = {
+	&gpio_attr_group,
+	NULL
+};
 
 struct of_device_id gpio_device_match[] = {
 	{.compatible = "org,bone-gpio-sysfs"},
@@ -45,6 +70,27 @@ struct platform_driver gpiosysfs_platform_driver = {
 	},
 };
 
+ssize_t direction_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+ssize_t direction_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+ssize_t value_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+ssize_t value_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
+{
+	return 0;
+}
+ssize_t label_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return 0;
+}
+
 int gpio_sysfs_probe(struct platform_device* pdev)
 {
 	/* Parent's device node */
@@ -52,6 +98,7 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 	struct device_node* child = NULL;
 	struct gpiodev_private_data* dev_data;
 	struct device* dev = &pdev->dev;
+	struct device* dev_sysfs;
 	const char* name;
 	int i = 0;
 	int ret;
@@ -85,6 +132,13 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 		if(ret){
 			dev_err(dev, "gpio direction set failed\n");
 			return ret;
+		}
+		/* Create devices under /sys/class/bone-gpio/ */
+		dev_sysfs = device_create_with_groups(gpio_drv_data.class_gpio, dev, 0, gpio_attr_groups,\
+						(void*)dev_data, dev_data->label);
+		if(IS_ERR(dev_sysfs)){
+			dev_err(dev, "Error in device_create\n");
+			return PTR_ERR(dev_sysfs);
 		}
 
 		i++;
