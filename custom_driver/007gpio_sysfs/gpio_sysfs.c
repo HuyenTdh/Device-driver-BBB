@@ -72,23 +72,59 @@ struct platform_driver gpiosysfs_platform_driver = {
 
 ssize_t direction_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	struct gpiodev_private_data *dev_data = (struct gpiodev_private_data*)dev_get_drvdata(dev);
+	int dir;
+	char *direction;
+
+	dir = gpiod_get_direction(dev_data->desc);
+	if(dir < 0){
+		return dir;
+	}
+	direction = (dir == 0) ? "out" : "in";
+
+	return sprintf(buf, "%s\n", direction);
 }
 ssize_t direction_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	return 0;
+        struct gpiodev_private_data *dev_data = (struct gpiodev_private_data*)dev_get_drvdata(dev);
+	int ret;
+
+	if(sysfs_streq(buf, "in"))
+		ret = gpiod_direction_input(dev_data->desc);
+	else if(sysfs_streq(buf, "out"))
+		ret = gpiod_direction_output(dev_data->desc, 0);
+	else
+		return -EINVAL;
+
+	return ret ? : count;
 }
 ssize_t value_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	struct gpiodev_private_data *dev_data = (struct gpiodev_private_data*)dev_get_drvdata(dev);
+	int value;
+
+	value = gpiod_get_value(dev_data->desc);
+
+	return sprintf(buf, "%d\n", value);
 }
 ssize_t value_store(struct device *dev, struct device_attribute *attr, const char *buf, size_t count)
 {
-	return 0;
+	struct gpiodev_private_data *dev_data = (struct gpiodev_private_data*)dev_get_drvdata(dev);
+	int ret;
+	long value;
+
+	ret = kstrtol(buf, 0, &value);
+	if(ret)
+		return ret;
+	gpiod_set_value(dev_data->desc, value);
+
+	return count;
 }
 ssize_t label_show(struct device *dev, struct device_attribute *attr, char *buf)
 {
-	return 0;
+	struct gpiodev_private_data *dev_data = (struct gpiodev_private_data*)dev_get_drvdata(dev);
+
+	return sprintf(buf, "%s\n", dev_data->label);
 }
 
 int gpio_sysfs_probe(struct platform_device* pdev)
