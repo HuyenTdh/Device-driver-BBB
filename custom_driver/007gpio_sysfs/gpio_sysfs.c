@@ -24,6 +24,7 @@ struct gpiodev_private_data{
 struct gpiodrv_private_data{
 	int total_devices;
 	struct class* class_gpio;
+	struct device** dev;
 };
 
 int gpio_sysfs_probe(struct platform_device* pdev);
@@ -134,10 +135,21 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 	struct device_node* child = NULL;
 	struct gpiodev_private_data* dev_data;
 	struct device* dev = &pdev->dev;
-	struct device* dev_sysfs;
 	const char* name;
 	int i = 0;
 	int ret;
+
+	gpio_drv_data.total_devices = of_get_available_child_count(parent);
+	if(!gpio_drv_data.total_devices){
+		dev_err(dev, "No devices found\n");
+		return -EINVAL;
+	}
+	dev_info(dev, "Total devices is %d\n", gpio_drv_data.total_devices);
+	gpio_drv_data.dev = devm_kzalloc(dev, sizeof(struct device*) * gpio_drv_data.total_devices, GFP_KERNEL);
+	if(!gpio_drv_data.dev){
+		dev_err(dev, "Cannot allocate memory for struct device\n");
+		return -ENOMEM;
+	}
 
 	for_each_available_child_of_node(parent, child){
 		dev_data = devm_kzalloc(dev, sizeof(struct gpiodev_private_data), GFP_KERNEL);
@@ -170,11 +182,11 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 			return ret;
 		}
 		/* Create devices under /sys/class/bone-gpio/ */
-		dev_sysfs = device_create_with_groups(gpio_drv_data.class_gpio, dev, 0, gpio_attr_groups,\
+		gpio_drv_data.dev[i] = device_create_with_groups(gpio_drv_data.class_gpio, dev, 0, gpio_attr_groups,\
 						(void*)dev_data, dev_data->label);
-		if(IS_ERR(dev_sysfs)){
+		if(IS_ERR(gpio_drv_data.dev[i])){
 			dev_err(dev, "Error in device_create\n");
-			return PTR_ERR(dev_sysfs);
+			return PTR_ERR(gpio_drv_data.dev[i]);
 		}
 
 		i++;
@@ -185,6 +197,13 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 
 int gpio_sysfs_remove(struct platform_device* pdev)
 {
+	int i;
+
+	dev_info(&pdev->dev, "Remove called\n");
+	for(i = 0; i < gpio_drv_data.total_devices; i++){
+		device_unregister(gpio_drv_data.dev[i]);
+	}
+
 	return 0;
 }
 
