@@ -1,15 +1,15 @@
 #include <linux/module.h>
+#include <linux/kernel.h>
 #include <linux/platform_device.h>
+#include <linux/string.h>
 #include <linux/fs.h>
-#include <linux/cdev.h>
+#include <asm/uaccess.h>
+#include <linux/init.h>
 #include <linux/device.h>
-#include <linux/slab.h>
-#include <linux/mod_devicetable.h>
-#include <linux/uaccess.h>
+#include <linux/io.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/sysfs.h>
-#include <linux/gpio/consumer.h>
+#include<linux/gpio/consumer.h>
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Huyen Do Van");
@@ -166,15 +166,14 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 		}
 
 		dev_data->desc = devm_fwnode_get_gpiod_from_child(dev, "bone", &child->fwnode,\
-								GPIOD_ASIS, dev_data->label);
+							GPIOD_ASIS, dev_data->label);
 		if(IS_ERR(dev_data->desc)){
 			ret = PTR_ERR(dev_data->desc);
+			if(ret == -ENOENT)
+				dev_err(dev, "No GPIO has been assigned to the requested function and/or index\n");
 			return ret;
 		}
-		if(!ret){
-			dev_err(dev, "No GPIO has been assigned to the requested function and/or index\n");
-			return ret;
-		}
+
 		/* Set the gpio direction to ouput */
 		ret = gpiod_direction_output(dev_data->desc, 0);
 		if(ret){
@@ -182,8 +181,8 @@ int gpio_sysfs_probe(struct platform_device* pdev)
 			return ret;
 		}
 		/* Create devices under /sys/class/bone-gpio/ */
-		gpio_drv_data.dev[i] = device_create_with_groups(gpio_drv_data.class_gpio, dev, 0, gpio_attr_groups,\
-						(void*)dev_data, dev_data->label);
+		gpio_drv_data.dev[i] = device_create_with_groups(gpio_drv_data.class_gpio, dev, 0, (void*)dev_data,\
+						gpio_attr_groups, dev_data->label);
 		if(IS_ERR(gpio_drv_data.dev[i])){
 			dev_err(dev, "Error in device_create\n");
 			return PTR_ERR(gpio_drv_data.dev[i]);
