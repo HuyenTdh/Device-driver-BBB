@@ -1,0 +1,65 @@
+diff --git a/arch/arm/boot/dts/am335x-bone-common.dtsi b/arch/arm/boot/dts/am335x-bone-common.dtsi
+index 136cc073f22d..2465d904a0ba 100644
+--- a/arch/arm/boot/dts/am335x-bone-common.dtsi
++++ b/arch/arm/boot/dts/am335x-bone-common.dtsi
+@@ -79,12 +79,12 @@
+ 		>;
+ 	};
+ 
+-//	i2c2_pins: pinmux_i2c2_pins {
+-//		pinctrl-single,pins = <
+-//			AM33XX_PADCONF(AM335X_PIN_UART1_CTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_ctsn.i2c2_sda */
+-//			AM33XX_PADCONF(AM335X_PIN_UART1_RTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_rtsn.i2c2_scl */
+-//		>;
+-//	};
++	i2c2_pins: pinmux_i2c2_pins {
++		pinctrl-single,pins = <
++			AM33XX_PADCONF(AM335X_PIN_UART1_CTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_ctsn.i2c2_sda */
++			AM33XX_PADCONF(AM335X_PIN_UART1_RTSN, PIN_INPUT_PULLUP, MUX_MODE3)	/* uart1_rtsn.i2c2_scl */
++		>;
++	};
+ 
+ 	uart0_pins: pinmux_uart0_pins {
+ 		pinctrl-single,pins = <
+@@ -285,8 +285,8 @@
+ 
+ &i2c2 {
+ 	pinctrl-names = "default";
+-	//pinctrl-0 = <&i2c2_pins>;
+-	pinctrl-0 = <>;
++	pinctrl-0 = <&i2c2_pins>;
++	//pinctrl-0 = <>;
+ 
+ 	status = "okay";
+ 	clock-frequency = <100000>;
+@@ -331,6 +331,12 @@
+ 			reg = <0 0x100>;
+ 		};
+ 	};
++
++	i2c_lcd: i2c_lcd@27 {
++        	compatible = "org,i2c-lcd";
++        	label = "lcd-16x02";
++        	reg = <0x27>;
++    	};
+ };
+ 
+ 
+@@ -481,7 +487,7 @@
+ 	/* P9_19 (ZCZ ball D17) i2c */
+ 	P9_19_pinmux {
+ 		compatible = "bone-pinmux-helper";
+-		status = "okay";
++		status = "disabled";
+ 		pinctrl-names = "default", "gpio", "gpio_pu", "gpio_pd", "gpio_input", "spi_cs", "can", "i2c", "pru_uart", "timer";
+ 		pinctrl-0 = <&P9_19_default_pin>;
+ 		pinctrl-1 = <&P9_19_gpio_pin>;
+@@ -498,7 +504,7 @@
+ 	/* P9_20 (ZCZ ball D18) i2c */
+ 	P9_20_pinmux {
+ 		compatible = "bone-pinmux-helper";
+-		status = "okay";
++		status = "disabled";
+ 		pinctrl-names = "default", "gpio", "gpio_pu", "gpio_pd", "gpio_input", "spi_cs", "can", "i2c", "pru_uart", "timer";
+ 		pinctrl-0 = <&P9_20_default_pin>;
+ 		pinctrl-1 = <&P9_20_gpio_pin>;
