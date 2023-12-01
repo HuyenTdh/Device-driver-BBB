@@ -69,7 +69,6 @@ void lcd_init(const struct i2c_client *client){
     mdelay(10);
     lcd_send_cmd(client, 0x20);
     mdelay(10);
-
     lcd_send_cmd(client, 0x28);
     mdelay(1);
     lcd_send_cmd(client, LCD_DISPLAY_MOVE);
@@ -83,7 +82,7 @@ void lcd_init(const struct i2c_client *client){
 }
 
 void lcd_send_string(const struct i2c_client *client, char* str, int length){
-    while(*str != 0x0A){
+    while((*str != 0x0A) && (*str != '\0')){
         lcd_send_data(client, *str);
         str++;
     }

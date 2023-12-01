@@ -6,10 +6,6 @@ void lcd_init(const struct i2c_client *client);
 void lcd_send_string(const struct i2c_client *client, char* str);
 void lcd_clear(const struct i2c_client *client);
 void lcd_home(const struct i2c_client *client);
-void lcd_no_display(const struct i2c_client *client);
-void lcd_display(const struct i2c_client *client);
-void lcd_no_cursor(const struct i2c_client *client);
-void lcd_cursor(const struct i2c_client *client);
 void lcd_goto_xy(const struct i2c_client *client,\
                 unsigned char x, unsigned char y);
 

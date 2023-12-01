@@ -2,11 +2,44 @@
 #include <linux/of.h>
 #include <linux/sysfs.h>
 #include <linux/string.h>
+#include <linux/fs.h>
 #include <linux/i2c.h>
+#include <linux/uaccess.h>
+#include <uapi/linux/i2c-lcd1602.h>
 #include "lcd_i2c.h"
 #include "lcd_driver.h"
 
 static struct lcd_drv_data lcd_drv_data;
+struct lcd_pos{
+    int x;
+    int y;
+};
+
+static struct lcd_pos get_lcd_pos(char* buf){
+    struct lcd_pos cur_pos;
+    char data[20];
+    int pos;
+    int end;
+
+    for(end = 0; (buf[end] != '\0') && (buf[end] != 0x0A); end++){
+        if(buf[end] == ',')
+            pos = end;
+    }
+    strncpy(data, buf, pos);
+    data[pos] = '\0';
+    if(kstrtoint(data, 10, &cur_pos.x) < 0){
+        cur_pos.x = -1;
+        return cur_pos;
+    }
+    strncpy(data, (buf + pos + 1), (end - pos - 1));
+    data[end - pos - 1] = '\0';
+    if(kstrtoint(data, 10, &cur_pos.y) < 0){
+        cur_pos.y = -1;
+        return cur_pos;
+    }
+
+    return cur_pos;
+}
 
 /**************************Create attribute of class***************************/
 ssize_t lcdcmd_store(struct device *dev, struct device_attribute *attr,
@@ -53,18 +86,15 @@ ssize_t lcdxy_store(struct device *dev, struct device_attribute *attr,
 			 const char *buf, size_t count){
     struct lcd_data* i2c_lcd_data = (struct lcd_data*)dev_get_drvdata(dev);
     int status;
-    long value;
-    int x;
-    int y;
+    struct lcd_pos cur_pos;
 
-    status = kstrtol(buf, 10, &value);
-    if(status < 0){
-        return status;
+    cur_pos = get_lcd_pos((char*)buf);
+    dev_info(dev, "%d,%d", cur_pos.x, cur_pos.y);
+    if((cur_pos.x < 0) || (cur_pos.y < 0)){
+        return -EFAULT;
     }
-    x = value / 10;
-    y = value % 10;
-    status = sprintf(i2c_lcd_data->lcd_xy, "(%d,%d)", x, y);
-    lcd_goto_xy(i2c_lcd_data->client, (unsigned char)x, (unsigned char)y);
+    status = sprintf(i2c_lcd_data->lcd_xy, "(%d,%d)", cur_pos.x, cur_pos.y);
+    lcd_goto_xy(i2c_lcd_data->client, (unsigned char)cur_pos.x, (unsigned char)cur_pos.y);
 
     return status;
 }
@@ -91,6 +121,74 @@ const struct attribute_group* lcd_attr_groups[] = {
     NULL
 };
 
+/**************************Create file operation****************************************/
+long lcd_unlocked_ioctl(struct file *filp, unsigned int cmd, unsigned long arg){
+    struct lcd_data* i2c_lcd_data;
+    struct lcd_pos cur_pos;
+    int index = 0;
+    char data[20];
+
+    i2c_lcd_data = (struct lcd_data*)filp->private_data;
+    switch(cmd){
+        case LCD_SEND_STRING:
+            do{
+                if(copy_from_user(data + index, (char*)arg + index, 1)){
+                    return -EFAULT;
+                }
+                index++;
+            }
+            while(data[index - 1] != '\0');
+            dev_info(lcd_drv_data.dev, "lcdtext: %s\n", data);
+            lcd_send_string(i2c_lcd_data->client, data);
+            break;
+        case LCD_CLEAR:
+            dev_info(lcd_drv_data.dev, "Clear LCD\n");
+            lcd_clear(i2c_lcd_data->client);
+            break;
+        case LCD_GOTO_XY:
+            if(arg < 0){
+                return -EFAULT;
+            }
+            do{
+                if(copy_from_user(data + index, (char*)arg + index, 1)){
+                    return -EFAULT;
+                }
+                index++;
+            }
+            while(data[index - 1] != '\0');
+            data[index] = '\0';
+            cur_pos = get_lcd_pos(data);
+            if((cur_pos.x < 0) || (cur_pos.y < 0)){
+                return -EFAULT;
+            }
+            dev_info(lcd_drv_data.dev, "LCD goto (%d,%d)\n", cur_pos.x, cur_pos.y);
+            index = sprintf(i2c_lcd_data->lcd_xy, "(%d,%d)", cur_pos.x, cur_pos.y);
+            if(!index){
+                return index;
+            }
+            lcd_goto_xy(i2c_lcd_data->client, (unsigned char)cur_pos.x, (unsigned char)cur_pos.y);
+            break;
+        default:
+            return -ENOTTY;
+    }
+
+    return 0;
+}
+
+int lcd_open(struct inode *inode, struct file *filp){
+    struct lcd_data* i2c_lcd_data;
+
+    i2c_lcd_data = container_of(inode->i_cdev, struct lcd_data, cdev);
+    filp->private_data = (void*)i2c_lcd_data;
+
+    return 0;
+}
+
+struct file_operations lcd_ops = {
+    .unlocked_ioctl = lcd_unlocked_ioctl,
+    .open = lcd_open,
+};
+
 /**************************Probe and remove driver's function***************************/
 int lcd_probe(struct i2c_client *client, const struct i2c_device_id *id){
     struct lcd_data* i2c_lcd_data;
@@ -115,17 +213,37 @@ int lcd_probe(struct i2c_client *client, const struct i2c_device_id *id){
     }
     i2c_lcd_data->client = client;
     sprintf(i2c_lcd_data->lcd_xy, "(0,0)");
-    /* Create device under /sys/class/i2c-lcd, name is "i2c-lcd"(i2c_lcd_data->label) */
-    lcd_drv_data.dev = device_create_with_groups(lcd_drv_data.i2c_lcd_class, dev,\
-                            0, (void*)i2c_lcd_data, lcd_attr_groups, i2c_lcd_data->label);
-    if(!lcd_drv_data.dev){
-        dev_err(dev, "Cannot create device\n");
-        return PTR_ERR(lcd_drv_data.dev);
+
+    res = alloc_chrdev_region(&lcd_drv_data.dev_number, 0, 1, "lcd1602");
+    if(res < 0){
+        dev_err(dev, "Cannot allocate device number\n");
+        return res;
+    }
+    cdev_init(&i2c_lcd_data->cdev, &lcd_ops);
+    i2c_lcd_data->cdev.owner = THIS_MODULE;
+    res = cdev_add(&i2c_lcd_data->cdev, lcd_drv_data.dev_number, 1);
+    if(res < 0){
+        dev_err(dev, "Cannot add device\n");
+        goto free_dev_num;
     }
 
+    /* Create device under /sys/class/i2c-lcd, name is "i2c-lcd"(i2c_lcd_data->label) */
+    lcd_drv_data.dev = device_create_with_groups(lcd_drv_data.i2c_lcd_class, dev,\
+                            lcd_drv_data.dev_number, (void*)i2c_lcd_data, lcd_attr_groups, i2c_lcd_data->label);
+    if(!lcd_drv_data.dev){
+        dev_err(dev, "Cannot create device\n");
+        res = PTR_ERR(lcd_drv_data.dev);
+        goto cdev_del;
+    }
     lcd_init(client);
 
     return 0;
+
+cdev_del:
+    cdev_del(&i2c_lcd_data->cdev);
+free_dev_num:
+    unregister_chrdev_region(lcd_drv_data.dev_number, 1);
+    return res;
 }
 
 int lcd_remove(struct i2c_client *client){
