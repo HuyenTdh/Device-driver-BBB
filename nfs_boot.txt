@@ -1,0 +1,47 @@
+********************************nfs*******************************************
+tftp ${loadaddr} /tftpboot/tftp_autotest/uImage              
+tftp ${fdtaddr} /tftpboot/tftp_autotest/am335x-boneblack.dtb
+setenv bootargs console=ttyO0,115200n8 root=/dev/nfs rw nfsroot=10.0.0.1:/tftpboot/rootfs,nfsvers=4,tcp ip=10.0.0.100:10.0.0.1::::eth0:off 
+bootm ${loadaddr} - ${fdtaddr}
+
+
+
+
+************************************************************
+needs mount.nfs in rootfs /sbin/ to mount in linux via network
+************************************************************
+install tftp on ubuntu:
+	- sudo apt-get install tftpd
+	- create /etc/xinetd.d/tftp:
+		service tftp
+		{
+		protocol        = udp
+		port            = 69
+		socket_type     = dgram
+		wait            = yes
+		user            = nobody
+		server          = /usr/sbin/in.tftpd
+		server_args     = /tftpboot
+		disable         = no
+		}
+	- sudo mkdir /tftpboot
+	- sudo chmod -R 777 tftpboot
+	- sudo chown -R nobody /tftpboot
+	- cp ~/src/images/uImage-dtb.am335x-boneblack
+	- sudo /etc/init.d/xinetd restart
+**************************************************************
+install nfs-server on ubuntu:
+	- sudo apt-get install nfs-kernel-server nfs-common portmap
+	- gvk51@gvk:~# sudo mkdir /srv/nfs/bbb
+	- gvk51@gvk:~# sudo tar -C /srv/nfs/bbb -xzf ~/src/images/rootfs.tar.gz
+	- gvk51@gvk:~# cd /srv/nfs/bbb
+	- gvk51@gvk:/srv/nfs/bb# sudo ln -s bin/busybox init
+	- append /etc/exports:
+		/home/<user>/rootfs <client_ip>(rw,sync,no_root_squash,no_all_squash,no_subtree_check)
+		or /tftpboot/rootfs *(rw,sync,no_root_squash,no_subtree_check)
+	- gvk51@gvk:~# sudo exportfs -a
+	- gvk51@gvk:~# sudo exportfs -rv
+	- gvk51@gvk:~# sudo service nfs-kernel-server start
+
+https://linuxkernel51.blogspot.com/2015/08/boot-beaglebone-black-with-nfs.html
+https://community.nxp.com/t5/i-MX-Processors/Boot-i-MX8MM-using-NFS/m-p/1152978
