@@ -1,0 +1,13 @@
+**********************************************************
+CANNOT MOUNT FAT-fs partition
+
+FAT-fs (mmcblk0p1): codepage cp437 not found
+
+fix: build lai kernel voi make menuconfig
+->file system-> nature language -> build in cp437
+
+[   72.694616] FAT-fs (mmcblk0p1): IO charset ascii not found
+
+fix: build lai kernel voi make menuconfig
+->file system-> nature language -> build in ascii
+**********************************************************

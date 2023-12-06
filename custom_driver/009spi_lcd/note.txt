@@ -1,0 +1,4 @@
+1. Don't have spidev0.0 in /dev:
+    enable CONFIG_SPI_SPIDEV kernel config.
+2. Don't have spi log:
+    enable CONFIG_SPI_DEBUG kernel config.
