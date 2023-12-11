@@ -118,16 +118,16 @@ struct nokia5110_dev_data{
     struct cdev         cdev;
     struct spi_device   *spi;
     spinlock_t          nokia_spinlock;
-    struct list_head	device_entry;
-    struct mutex		buf_lock;
-    u8			        *tx_buffer;
-	u8			        *rx_buffer;
-	u32			        speed_hz;
+    struct list_head    device_entry;
+    struct mutex        buf_lock;
+    u8                  *tx_buffer;
+    u8                  *rx_buffer;
+    u32                 speed_hz;
 };
 
 struct nokia5110_drv_data{
-    struct device* nokia_device;
-    dev_t dev_number;
+    struct device*      nokia_device;
+    dev_t               dev_number;
 };
 
 static struct class* nokia5110_class;
@@ -173,6 +173,100 @@ nokia_sync_write(struct nokia5110_dev_data *nokiadev, size_t len)
     return nokia_sync(nokiadev, &m);    
 }
 
+/*-------------------------------------------------------------------------*/
+#define NOKIA5110_FUNCTION_SET                      0x20U
+#define NOKIA5110_SET_CURSOR_Y                      0x40U
+#define NOKIA5110_DISPLAY_CONTROL                   0x08U
+#define NOKIA5110_SET_CURSOR_X                      0x80U
+#define NOKIA5110_TEMPERATURE_CONTROL               0x04U
+#define NOKIA5110_BIASS_SYSTEM                      0x10U
+#define NOKIA5110_SET_VOP                           0x80U
+
+static void NOKIA5110_WriteCmd(struct nokia5110_dev_data *nokia_dev, u8 cmd)
+{
+    mutex_lock(&nokia_dev->buf_lock);
+    gpiod_set_value(nokia_dev->dc_desc, 0);
+    nokia_dev->tx_buffer[0] = cmd;
+    nokia_sync_write(nokia_dev, 1);
+    gpiod_set_value(nokia_dev->dc_desc, 1);
+    mutex_unlock(&nokia_dev->buf_lock);
+}
+
+static void NOKIA5110_WriteData(struct nokia5110_dev_data *nokia_dev, u8 data)
+{
+    mutex_lock(&nokia_dev->buf_lock);
+    gpiod_set_value(nokia_dev->dc_desc, 1);
+    nokia_dev->tx_buffer[0] = data;
+    nokia_sync_write(nokia_dev, 1);
+    mutex_unlock(&nokia_dev->buf_lock);
+}
+
+static void NOKIA5110_SetCursorY(struct nokia5110_dev_data *nokia_dev, u8 y)
+{
+    NOKIA5110_WriteCmd(nokia_dev, NOKIA5110_SET_CURSOR_Y | y);
+}
+
+static void NOKIA5110_SetCursorX(struct nokia5110_dev_data *nokia_dev, u8 x)
+{
+    NOKIA5110_WriteCmd(nokia_dev, NOKIA5110_SET_CURSOR_X | x);
+}
+
+static void NOKIA5110_FunctionSet(struct nokia5110_dev_data *nokia_dev, bool pd, bool v, bool h)
+{
+    u8 cmd = NOKIA5110_FUNCTION_SET | (pd << 2) | (v << 1) | h;
+    NOKIA5110_WriteCmd(nokia_dev, cmd);
+}
+
+static void NOKIA5110_DisplayControl(struct nokia5110_dev_data *nokia_dev, bool d, bool e)
+{
+    u8 cmd = NOKIA5110_DISPLAY_CONTROL | (d << 2) | e;
+    NOKIA5110_WriteCmd(nokia_dev, cmd);
+}
+
+static void NOKIA5110_TemperatureControl(struct nokia5110_dev_data *nokia_dev, u8 tc)
+{
+    u8 cmd = NOKIA5110_TEMPERATURE_CONTROL | tc;
+    NOKIA5110_WriteCmd(nokia_dev, cmd);
+}
+
+static void NOKIA5110_BiasSystem(struct nokia5110_dev_data *nokia_dev, u8 bs)
+{
+    u8 cmd = NOKIA5110_BIASS_SYSTEM | bs;
+    NOKIA5110_WriteCmd(nokia_dev, cmd);
+}
+
+static void NOKIA5110_SetVop(struct nokia5110_dev_data *nokia_dev, u8 vop)
+{
+    u8 cmd = NOKIA5110_SET_VOP | vop;
+    NOKIA5110_WriteCmd(nokia_dev, cmd);
+}
+
+static void NOKIA5110_SetCursor(struct nokia5110_dev_data *nokia_dev, u8 x, u8 y)
+{
+    NOKIA5110_SetCursorX(nokia_dev, x);
+    NOKIA5110_SetCursorY(nokia_dev, y);
+}
+
+static int NOKIA5110_Init(struct nokia5110_dev_data *nokia_dev)
+{
+    int res;
+    /* Set the gpio direction to ouput */
+	res = gpiod_direction_output(nokia_dev->dc_desc, 0);
+    if(res){
+        return res;
+    }
+    gpiod_set_value(nokia_dev->dc_desc, 1);
+    NOKIA5110_FunctionSet(nokia_dev, 0, 0, 1);
+    NOKIA5110_SetVop(nokia_dev, 0x04);
+    NOKIA5110_TemperatureControl(nokia_dev, 0x03);
+    NOKIA5110_BiasSystem(nokia_dev, 0x13);
+    NOKIA5110_FunctionSet(nokia_dev, 0, 0, 0);
+    NOKIA5110_DisplayControl(nokia_dev, 1 , 0);
+    NOKIA5110_SetCursor(nokia_dev, 0, 0);
+    return 0;
+}
+
+/*-------------------------------------------------------------------------*/
 static ssize_t
 nokia_write(struct file *filp, const char __user *buf,
                 size_t count, loff_t *f_pos)
@@ -289,13 +383,12 @@ int nokia5110_probe(struct spi_device *spi)
 
     dev_set_drvdata(&spi->dev, nokia_dev_data);
 
-    /* Set the gpio direction to ouput */
-	res = gpiod_direction_output(nokia_dev_data->dc_desc, 0);
-	if(res){
-		dev_err(dev, "gpio direction set failed\n");
-		goto device_destroy;
-	}
-    gpiod_set_value(nokia_dev_data->dc_desc, 1);
+    res = NOKIA5110_Init(nokia_dev_data);
+    if(res)
+    {
+        dev_err(dev, "Cannot set DC pin direction\n");
+        goto device_destroy;
+    }
 
     return 0;
 device_destroy:
