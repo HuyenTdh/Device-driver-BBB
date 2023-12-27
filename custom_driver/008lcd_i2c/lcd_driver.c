@@ -81,7 +81,7 @@ void lcd_init(const struct i2c_client *client){
 	lcd_send_cmd(client, 0x0C);
 }
 
-void lcd_send_string(const struct i2c_client *client, char* str, int length){
+void lcd_send_string(const struct i2c_client *client, char* str){
     while((*str != 0x0A) && (*str != '\0')){
         lcd_send_data(client, *str);
         str++;

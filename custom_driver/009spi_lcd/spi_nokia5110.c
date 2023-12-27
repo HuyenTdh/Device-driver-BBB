@@ -10,6 +10,7 @@
 #include <linux/cdev.h>
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
+#include <linux/string.h>
 
 /*------------------------------------FONT---------------------------------*/
 static const unsigned short ASCII[][5] =
@@ -113,6 +114,11 @@ static const unsigned short ASCII[][5] =
 };
 
 /*-------------------------------------------------------------------------*/
+struct nokia_position{
+    char x;
+    char y;
+};
+
 struct nokia5110_dev_data{
     char                label[20];
     struct gpio_desc    *dc_desc;
@@ -125,6 +131,7 @@ struct nokia5110_dev_data{
     u8                  *tx_buffer;
     u8                  *rx_buffer;
     u32                 speed_hz;
+    struct nokia_position pos;
 };
 
 struct nokia5110_drv_data{
@@ -173,6 +180,37 @@ nokia_sync_write(struct nokia5110_dev_data *nokiadev, size_t len)
     spi_message_init(&m);
     spi_message_add_tail(&t, &m);
     return nokia_sync(nokiadev, &m);    
+}
+
+struct nokia_position nokia_get_postion(struct nokia5110_dev_data *nokiadev,\
+            char *buf, size_t count)
+{
+    struct nokia_position pos;
+    int index;
+    int i;
+    char tmp[20];
+    int status;
+
+    strncpy(tmp, buf, count);
+    for(i = 0; i < count; i++) {
+        switch (tmp[i])
+        {
+        case ',':
+            index = i;
+            break;
+        case 0x0A:
+            tmp[i] = '\0';
+            break;
+
+        default:
+            break;
+        }
+    }
+    tmp[index] = '\0';
+    status = kstrtos8(tmp, 10, &pos.x);
+    status = kstrtos8(tmp + index + 1, 10, &pos.y);
+
+    return pos;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -278,8 +316,9 @@ static void NOKIA5110_SetCursor(struct nokia5110_dev_data *nokia_dev, u8 x, u8 y
 static void NOKIA5110_Reset(struct nokia5110_dev_data *nokia_dev)
 {
     gpiod_set_value(nokia_dev->rst_desc, 0);
-    mdelay(1);
+    mdelay(2);
     gpiod_set_value(nokia_dev->rst_desc, 1);
+    mdelay(2);
 }
 
 static void NOKIA5110_Clear(struct nokia5110_dev_data *nokia_dev)
@@ -323,11 +362,11 @@ static int NOKIA5110_Init(struct nokia5110_dev_data *nokia_dev)
     }
     gpiod_set_value(nokia_dev->dc_desc, 1);
     NOKIA5110_Reset(nokia_dev);
-    NOKIA5110_SetVop(nokia_dev, 0x38);
-    NOKIA5110_TemperatureControl(nokia_dev, 0);
     NOKIA5110_BiasSystem(nokia_dev, 0x04);
+    NOKIA5110_SetVop(nokia_dev, 0x28);
     NOKIA5110_DisplayControl(nokia_dev, PCD8544_DISPLAY_NORMAL);
     NOKIA5110_Clear(nokia_dev);
+    NOKIA5110_WriteString(nokia_dev, "hello");
 
     return 0;
 }
@@ -384,8 +423,68 @@ static struct of_device_id nokia5110_dt_ids[] = {
 MODULE_DEVICE_TABLE(of, nokia5110_dt_ids);
 
 /*-------------------------------------------------------------------------*/
+ssize_t nokiacmd_store(struct device *dev, struct device_attribute *attr,
+            const char *buf, size_t count)
+{
+    struct nokia5110_dev_data *nokia_dev = (struct nokia5110_dev_data*)dev_get_drvdata(dev);
+    unsigned long val;
+    int status;
 
-const struct attribute_group* nokia_attr_groups[];
+    status = kstrtol(buf, 0, &val);
+    if(status == 0)
+        NOKIA5110_WriteCmd(nokia_dev, val);
+
+    return status;
+}
+
+ssize_t nokiatext_store(struct device *dev, struct device_attribute *attr,
+            const char *buf, size_t count)
+{
+    struct nokia5110_dev_data *nokia_dev = (struct nokia5110_dev_data*)dev_get_drvdata(dev);
+
+    dev_info(dev, "text: %s", buf);
+    NOKIA5110_WriteString(nokia_dev, (char*)buf);
+
+    return count;
+}
+
+ssize_t nokiaxy_store(struct device *dev, struct device_attribute *attr,
+            const char *buf, size_t count)
+{
+    struct nokia5110_dev_data *nokia_dev = (struct nokia5110_dev_data*)dev_get_drvdata(dev);
+
+    nokia_dev->pos = nokia_get_postion(nokia_dev, (char*)buf, count);
+    dev_info(dev, "cursor position: %d,%d\n", nokia_dev->pos.x, nokia_dev->pos.y);
+    NOKIA5110_SetCursor(nokia_dev, nokia_dev->pos.x, nokia_dev->pos.y);
+
+    return count;
+}
+
+ssize_t nokiaxy_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+
+    return 0;
+}
+
+static DEVICE_ATTR_WO(nokiacmd);
+static DEVICE_ATTR_WO(nokiatext);
+static DEVICE_ATTR_RW(nokiaxy);
+
+struct attribute* nokia_attrs[] = {
+    &dev_attr_nokiacmd.attr,
+    &dev_attr_nokiatext.attr,
+    &dev_attr_nokiaxy.attr,
+    NULL
+};
+
+struct attribute_group nokia_attr_group = {
+    .attrs = nokia_attrs
+};
+
+const struct attribute_group* nokia_attr_groups[] = {
+    &nokia_attr_group,
+    NULL
+};
 
 /*-------------------------------------------------------------------------*/
 int nokia5110_probe(struct spi_device *spi)

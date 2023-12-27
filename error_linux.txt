@@ -12,4 +12,7 @@ fix: build lai kernel voi make menuconfig
 ->file system-> nature language -> build in ascii
 **********************************************************
 hien thi nhung pingroup duoc cau hinh trong devicetree
-cat /sys/kernel/debug/pinctrl/44e10800.pinmux/pingroups 
+cat /sys/kernel/debug/pinctrl/44e10800.pinmux/pingroups
+
+**********************************************************
+store attribute cannot return 0(happen infinity loop)

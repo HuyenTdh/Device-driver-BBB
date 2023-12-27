@@ -2,3 +2,4 @@
     enable CONFIG_SPI_SPIDEV kernel config.
 2. Don't have spi log:
     enable CONFIG_SPI_DEBUG kernel config.
+3. store attribute cannot return 0(happen infinity loop)
