@@ -1,0 +1,19 @@
+diff --git a/arch/arm/configs/bb.org_defconfig b/arch/arm/configs/bb.org_defconfig
+index 4aaf6cf36794..3350c71a6e38 100644
+--- a/arch/arm/configs/bb.org_defconfig
++++ b/arch/arm/configs/bb.org_defconfig
+@@ -2664,3 +2664,14 @@ CONFIG_BLK_DEV_IO_TRACE=y
+ # CONFIG_RUNTIME_TESTING_MENU is not set
+ CONFIG_BUG_ON_DATA_CORRUPTION=y
+ # CONFIG_STRICT_DEVMEM is not set
++
++CONFIG_EFI_VARS_PSTORE=y
++CONFIG_PSTORE=y
++CONFIG_PSTORE_DEFAULT_KMSG_BYTE=10240
++CONFIG_DEFLATE_COMPRESS=y
++CONFIG_PSTORE_COMPRESS=y
++CONFIG_DEFLATE_COMPRESS_DEFAULT=y
++CONFIG_COMPRESS_DEFAULT="deflate"
++CONFIG_PSTORE_CONSOLE=y
++CONFIG_PSTORE_PMSG=y
++CONFIG_PSTORE_RAM=y
