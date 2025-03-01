@@ -1,0 +1,19 @@
+diff --git a/arch/arm/configs/bb.org_defconfig b/arch/arm/configs/bb.org_defconfig
+index 4aaf6cf36794..524205373c86 100644
+--- a/arch/arm/configs/bb.org_defconfig
++++ b/arch/arm/configs/bb.org_defconfig
+@@ -2664,3 +2664,14 @@ CONFIG_BLK_DEV_IO_TRACE=y
+ # CONFIG_RUNTIME_TESTING_MENU is not set
+ CONFIG_BUG_ON_DATA_CORRUPTION=y
+ # CONFIG_STRICT_DEVMEM is not set
++
++CONFIG_KALLSYMS_ALL=y
++CONFIG_DEBUG_INFO=y
++CONFIG_GDB_SCRIPTS=y
++CONFIG_KGDB=y
++CONFIG_KGDB_SERIAL_CONSOLE=y
++CONFIG_KGDB_KDB=y
++CONFIG_KDB_DEFAULT_ENABLE=0x1
++CONFIG_KDB_KEYBOARD=y
++CONFIG_KDB_CONTINUE_CATASTROPHIC=0
++CONFIG_CONSOLE_POLL=y
